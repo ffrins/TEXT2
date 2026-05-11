@@ -1,44 +1,125 @@
-// GB 50017-2017 表 7.2.1-1 / -2 截面分类（简化版）
-// 仅覆盖最常见组合：轧制 H、热轧厚壁箱形/箱管、热轧无缝圆管、轧制实心矩形
+// GB 50017-2017 表 7.2.1-1（t<40mm）+ 表 7.2.1-2（t≥40mm）
+// 按双轴返回截面类别。
 
-import type { SectionKind } from './sections';
+import type { SectionKind, SectionParams } from './sections';
 import type { SteelGrade } from './steel';
 
 export type SectionClass = 'a' | 'b' | 'c' | 'd';
 
+/** 制造方式：影响 H / BOX / PIPE 的类别判定 */
+export type Fabrication =
+  | 'rolled'              // 轧制（H/I 型钢、热轧无缝管、热轧矩形）
+  | 'welded_flame'        // 焊接 H，翼缘为焰切边
+  | 'welded_rolled_edge'; // 焊接 H，翼缘为轧制边或剪切边 / 焊接箱形 / 焊接圆管
+
+export interface AxisClass { x: SectionClass; y: SectionClass }
+
+export interface ClassifyOpts {
+  fabrication?: Fabrication;
+  /** 截面参数（用于 BOX 的 b/t 判定） */
+  section?: SectionParams;
+}
+
 /**
- * 简化的截面分类规则（板厚 t < 40mm）：
- *   - 圆管：a 类（绕任意轴）
- *   - 箱形（焊接，板厚一般）：b 类
- *   - 实心矩形：b 类
- *   - 轧制 H：绕强轴 a 类，绕弱轴 b 类（取保守较小者 → b 类）
+ * GB 50017-2017 表 7.2.1-1 / -2 的双轴截面分类。
  *
- * 板厚 t ≥ 40mm：整体降一级（a→b, b→c, c→d）
+ * 表 7.2.1-1 (t<40mm)：
+ *   轧制 H/I：       x=a, y=b
+ *   焊接 H 焰切边：  x=b, y=b
+ *   焊接 H 轧/剪边： x=b, y=c
+ *   热轧无缝圆管：   a (双轴)
+ *   焊接圆管：       b (双轴)
+ *   热轧矩形/方管：  a (双轴)
+ *   焊接箱形 b/t<20: b (双轴)
+ *   焊接箱形 b/t≥20: c (双轴)
  *
- * Q235 钢：原 a 类 → b 类（GB 表注 a*）
+ * 表 7.2.1-2 (t≥40mm)，按 40≤t<80 / t≥80 两档：
+ *   轧制 H/I：           t<80→x=b,y=c；t≥80→x=c,y=d
+ *   焊接 H 焰切边：      t<80→x=b,y=b；t≥80→x=c,y=c
+ *   焊接 H 轧/剪边：     t<80→x=b,y=c；t≥80→x=c,y=d
+ *   焊接箱形 b/t<20：    t<80→x=b,y=b；t≥80→x=c,y=c
+ *   圆管：               与 t<40 同
  *
- * 真实工程中分类还区分轧制/焊接、翼缘宽厚比等，第一版给出的是教学常用近似。
+ * 表注："当 Q235 钢材出现 a 类时，应改用 b 类。"
  */
 export function classifySection(
   kind: SectionKind,
   grade: SteelGrade,
   tMax: number,
-): SectionClass {
-  let cls: SectionClass;
+  opts: ClassifyOpts = {},
+): AxisClass {
+  const fab = opts.fabrication ?? 'rolled';
+  const sec = opts.section;
+  const t1 = tMax < 40;     // 表 1
+  const t40_80 = tMax >= 40 && tMax < 80;
+
+  let res: AxisClass;
+
   switch (kind) {
-    case 'PIPE': cls = 'a'; break;
-    case 'H':    cls = 'b'; break; // 取保守（弱轴）
-    case 'BOX':  cls = 'b'; break;
-    case 'RECT': cls = 'b'; break;
-    default:     cls = 'b';
+    case 'PIPE': {
+      // 圆管：热轧无缝 a；焊接 b
+      const cls: SectionClass = fab === 'rolled' ? 'a' : 'b';
+      res = { x: cls, y: cls };
+      break;
+    }
+
+    case 'H': {
+      if (fab === 'rolled') {
+        if (t1)       res = { x: 'a', y: 'b' };
+        else if (t40_80) res = { x: 'b', y: 'c' };
+        else /* t80 */ res = { x: 'c', y: 'd' };
+      } else if (fab === 'welded_flame') {
+        if (t1)       res = { x: 'b', y: 'b' };
+        else if (t40_80) res = { x: 'b', y: 'b' };
+        else /* t80 */ res = { x: 'c', y: 'c' };
+      } else /* welded_rolled_edge */ {
+        if (t1)       res = { x: 'b', y: 'c' };
+        else if (t40_80) res = { x: 'b', y: 'c' };
+        else /* t80 */ res = { x: 'c', y: 'd' };
+      }
+      break;
+    }
+
+    case 'BOX': {
+      // 计算 b/t (使用更小宽 / 厚)
+      const bt = sec && sec.kind === 'BOX'
+        ? Math.min(sec.B, sec.H) / sec.t
+        : 0;
+      const slender = bt >= 20;
+      if (t1) {
+        const cls: SectionClass = slender ? 'c' : 'b';
+        res = { x: cls, y: cls };
+      } else if (t40_80) {
+        const cls: SectionClass = slender ? 'c' : 'b';
+        res = { x: cls, y: cls };
+      } else {
+        const cls: SectionClass = slender ? 'd' : 'c';
+        res = { x: cls, y: cls };
+      }
+      break;
+    }
+
+    case 'RECT': {
+      // 实心矩形 / 方形（按热轧棒材）：a 类
+      const cls: SectionClass = t1 ? 'a' : (t40_80 ? 'b' : 'c');
+      res = { x: cls, y: cls };
+      break;
+    }
+
+    default:
+      res = { x: 'b', y: 'b' };
   }
-  // 厚板修正
-  if (tMax >= 40) cls = bump(cls);
-  // Q235 修正：原 a 类 → b 类
-  if (grade === 'Q235' && cls === 'a') cls = 'b';
-  return cls;
+
+  // Q235 注：原 a → b
+  if (grade === 'Q235') {
+    if (res.x === 'a') res.x = 'b';
+    if (res.y === 'a') res.y = 'b';
+  }
+  return res;
 }
 
-function bump(c: SectionClass): SectionClass {
-  return c === 'a' ? 'b' : c === 'b' ? 'c' : c === 'c' ? 'd' : 'd';
+/** 取双轴中较保守（编号大）的一类 */
+export function worseClass(c: AxisClass): SectionClass {
+  const order: SectionClass[] = ['a', 'b', 'c', 'd'];
+  return order[Math.max(order.indexOf(c.x), order.indexOf(c.y))];
 }

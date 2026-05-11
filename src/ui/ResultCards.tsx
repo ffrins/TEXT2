@@ -20,6 +20,7 @@ export function ResultCards() {
           label={d.props.Ix >= d.props.Iy ? '绕 x 轴 (强轴)' : '绕 x 轴 (弱轴)'}
           lambda={d.lambdaX}
           phi={d.phiX}
+          cls={d.axisCls.x}
           isControl={d.controlAxis === 'x'}
           i={d.props.ix}
         />
@@ -28,6 +29,7 @@ export function ResultCards() {
           label={d.props.Iy > d.props.Ix ? '绕 y 轴 (强轴)' : '绕 y 轴 (弱轴)'}
           lambda={d.lambdaY}
           phi={d.phiY}
+          cls={d.axisCls.y}
           isControl={d.controlAxis === 'y'}
           i={d.props.iy}
         />
@@ -62,20 +64,32 @@ export function ResultCards() {
   );
 }
 
+const AXIS_COLORS = { x: '#fb7185', y: '#34d399' } as const;
+const CLS_COLOR_MAP: Record<string, string> = {
+  a: '#22c55e', b: '#3b82f6', c: '#f59e0b', d: '#ef4444',
+};
+
 function AxisRow({
-  axis, label, lambda, phi, isControl, i,
-}: { axis: 'x' | 'y'; label: string; lambda: number; phi: number; isControl: boolean; i: number }) {
+  axis, label, lambda, phi, cls, isControl, i,
+}: { axis: 'x' | 'y'; label: string; lambda: number; phi: number; cls: string; isControl: boolean; i: number }) {
   return (
     <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-[12px] ${
       isControl ? 'bg-blue-600/15 border border-blue-500/40' : 'bg-[#1c2029] border border-transparent'
     }`}>
-      <span className={`font-mono text-[11px] w-6 ${axis === 'x' ? 'text-rose-300' : 'text-emerald-300'}`}>
+      <span className="font-mono text-[11px] w-6" style={{ color: AXIS_COLORS[axis] }}>
         λ<sub>{axis}</sub>
       </span>
       <span className="text-slate-400 text-[11px] flex-1">{label}</span>
+      <span
+        className="text-[10px] font-bold w-4 h-4 inline-flex items-center justify-center rounded-sm text-white"
+        style={{ background: CLS_COLOR_MAP[cls] }}
+        title={`截面类别 ${cls}`}
+      >
+        {cls}
+      </span>
       <span className="text-slate-400 text-[10px] font-mono">i={i.toFixed(1)}</span>
-      <span className="text-slate-100 font-mono w-14 text-right">{lambda.toFixed(1)}</span>
-      <span className="text-slate-400 text-[10px]">→ φ=</span>
+      <span className="text-slate-100 font-mono w-12 text-right">{lambda.toFixed(1)}</span>
+      <span className="text-slate-400 text-[10px]">→φ=</span>
       <span className="text-slate-100 font-mono w-12 text-right">{phi.toFixed(3)}</span>
       {isControl && <span className="text-[10px] text-blue-300">控制</span>}
     </div>

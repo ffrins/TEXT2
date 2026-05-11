@@ -19,11 +19,11 @@ const CLS_COLORS: Record<SectionClass, string> = {
 
 export function PhiLambdaChart() {
   const d = useDerived();
-  const { fy, cls, lambdaX, lambdaY, controlAxis } = d;
-  const lambdaCtrl = d.lambda;
+  const { fy, axisCls, lambdaX, lambdaY, phiX, phiY, controlAxis } = d;
   const grade = useStore((s) => s.grade);
 
-  // 在当前控制长细比下，4 个类各自的 φ
+  // 控制轴 λ 下，4 类的 φ（用于"如果按这一 λ 套用 4 种曲线分别会是多少"对照）
+  const lambdaCtrl = controlAxis === 'y' ? lambdaY : lambdaX;
   const dotsAtCtrl = useMemo(() => ({
     a: phiGB(lambdaCtrl, fy, 'a'),
     b: phiGB(lambdaCtrl, fy, 'b'),
@@ -52,22 +52,21 @@ export function PhiLambdaChart() {
     <div className="bg-[#151820] border border-[#2a2f3a] rounded-md p-3">
       <div className="flex items-baseline justify-between mb-1.5 flex-wrap gap-x-3 gap-y-1">
         <div className="text-[13px] font-semibold text-slate-200">
-          稳定系数曲线 φ - λ <span className="text-slate-500 text-[11px] ml-2">{grade} · fy = {fy} MPa · 当前 {cls} 类</span>
+          稳定系数曲线 φ - λ <span className="text-slate-500 text-[11px] ml-2">{grade} · fy = {fy} MPa</span>
         </div>
         <div className="text-[11px] text-slate-400 font-mono">
           λ<sub>x</sub>=<span className="text-rose-300">{lambdaX.toFixed(1)}</span>
+          <span className="text-slate-500"> ({axisCls.x})</span>
           <span className="mx-1">·</span>
           λ<sub>y</sub>=<span className="text-emerald-300">{lambdaY.toFixed(1)}</span>
+          <span className="text-slate-500"> ({axisCls.y})</span>
           <span className="mx-1">·</span>
           控制=<span className="text-blue-300">λ<sub>{controlAxis}</sub></span>
         </div>
       </div>
-      <div className="text-[10px] text-slate-500 mb-2">
-        在控制长细比下各截面类对应 φ：
-        <span className="ml-2"><Dot c={CLS_COLORS.a}/> a={dotsAtCtrl.a.toFixed(3)}</span>
-        <span className="ml-2"><Dot c={CLS_COLORS.b}/> b={dotsAtCtrl.b.toFixed(3)}</span>
-        <span className="ml-2"><Dot c={CLS_COLORS.c}/> c={dotsAtCtrl.c.toFixed(3)}</span>
-        <span className="ml-2"><Dot c={CLS_COLORS.d}/> d={dotsAtCtrl.d.toFixed(3)}</span>
+      <div className="text-[10px] text-slate-500 mb-2 flex flex-wrap gap-x-3 gap-y-0.5">
+        <span><Dot c={CLS_COLORS[axisCls.x]}/> 工作点 x：λ={lambdaX.toFixed(1)}, φ<sub>x</sub>=<span className="text-slate-200 font-mono">{phiX.toFixed(3)}</span> （{axisCls.x} 类曲线）</span>
+        <span><Dot c={CLS_COLORS[axisCls.y]}/> 工作点 y：λ={lambdaY.toFixed(1)}, φ<sub>y</sub>=<span className="text-slate-200 font-mono">{phiY.toFixed(3)}</span> （{axisCls.y} 类曲线）</span>
       </div>
       <div style={{ width: '100%', height: 280 }}>
         <ResponsiveContainer>
@@ -92,10 +91,10 @@ export function PhiLambdaChart() {
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line type="monotone" dataKey="euler" stroke="#9ca3af" strokeDasharray="4 3" dot={false} name="Euler σ/fy" />
-            <Line type="monotone" dataKey="a" stroke={CLS_COLORS.a} dot={false} name="a 类" strokeWidth={cls === 'a' ? 2.5 : 1.2} />
-            <Line type="monotone" dataKey="b" stroke={CLS_COLORS.b} dot={false} name="b 类" strokeWidth={cls === 'b' ? 2.5 : 1.2} />
-            <Line type="monotone" dataKey="c" stroke={CLS_COLORS.c} dot={false} name="c 类" strokeWidth={cls === 'c' ? 2.5 : 1.2} />
-            <Line type="monotone" dataKey="d" stroke={CLS_COLORS.d} dot={false} name="d 类" strokeWidth={cls === 'd' ? 2.5 : 1.2} />
+            <Line type="monotone" dataKey="a" stroke={CLS_COLORS.a} dot={false} name="a 类" strokeWidth={isUsed('a', axisCls) ? 2.5 : 1.1} />
+            <Line type="monotone" dataKey="b" stroke={CLS_COLORS.b} dot={false} name="b 类" strokeWidth={isUsed('b', axisCls) ? 2.5 : 1.1} />
+            <Line type="monotone" dataKey="c" stroke={CLS_COLORS.c} dot={false} name="c 类" strokeWidth={isUsed('c', axisCls) ? 2.5 : 1.1} />
+            <Line type="monotone" dataKey="d" stroke={CLS_COLORS.d} dot={false} name="d 类" strokeWidth={isUsed('d', axisCls) ? 2.5 : 1.1} />
             {/* 双轴 λ 参考线 */}
             <ReferenceLine x={lambdaX} stroke="#fb7185" strokeDasharray="3 3" strokeWidth={controlAxis === 'x' ? 2 : 1}>
               <Label value={`λx=${lambdaX.toFixed(1)}`} position="top" fill="#fb7185" fontSize={10} />
@@ -141,22 +140,36 @@ export function PhiLambdaChart() {
               legendType="none"
               r={5}
             />
-            {/* 高亮当前类的环 */}
+            {/* 当前柱的两个真实工作点：(λx, φx) 在 axisCls.x 曲线上，(λy, φy) 在 axisCls.y 曲线上 */}
             <Scatter
-              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl[cls] }]}
+              data={[{ lambda: lambdaX, value: phiX }]}
               dataKey="value"
-              fill="none"
+              fill={CLS_COLORS[axisCls.x]}
               stroke="#f8fafc"
               strokeWidth={2}
               shape="circle"
               legendType="none"
-              r={9}
+              r={7}
+            />
+            <Scatter
+              data={[{ lambda: lambdaY, value: phiY }]}
+              dataKey="value"
+              fill={CLS_COLORS[axisCls.y]}
+              stroke="#f8fafc"
+              strokeWidth={2}
+              shape="circle"
+              legendType="none"
+              r={7}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
+}
+
+function isUsed(c: SectionClass, axisCls: { x: SectionClass; y: SectionClass }): boolean {
+  return axisCls.x === c || axisCls.y === c;
 }
 
 function Dot({ c }: { c: string }) {

@@ -7,8 +7,8 @@ import type { SteelGrade } from './mechanics/steel';
 import { fyOf, E_STEEL } from './mechanics/steel';
 import type { SupportKind } from './mechanics/supports';
 import { SUPPORTS } from './mechanics/supports';
-import type { SectionClass } from './mechanics/classify';
-import { classifySection } from './mechanics/classify';
+import type { SectionClass, AxisClass, Fabrication } from './mechanics/classify';
+import { classifySection, worseClass } from './mechanics/classify';
 import { eulerNcr, gbNcr, phiGB, slenderness } from './mechanics/buckling';
 
 export interface AppState {
@@ -20,6 +20,7 @@ export interface AppState {
   support: SupportKind;
   grade: SteelGrade;
   classOverride: SectionClass | 'auto';
+  fabrication: Fabrication;        // 制造方式，影响截面分类
   P: number;                       // 轴向力 N
   deformAmp: number;               // 教学用变形放大系数 [0..1]，仅显示，不影响力学计算
 
@@ -31,6 +32,7 @@ export interface AppState {
   setSupport: (s: SupportKind) => void;
   setGrade: (g: SteelGrade) => void;
   setClassOverride: (c: SectionClass | 'auto') => void;
+  setFabrication: (f: Fabrication) => void;
   setP: (N: number) => void;
   setDeformAmp: (a: number) => void;
 }
@@ -39,6 +41,11 @@ export interface AppState {
 export interface DerivedState {
   props: SectionProps;
   fy: number;
+  /** 自动判定的双轴截面类别（按规范） */
+  axisClsAuto: AxisClass;
+  /** 实际使用的双轴截面类别（受 classOverride 影响） */
+  axisCls: AxisClass;
+  /** 控制轴（较保守一侧）类别，仅用于徽标摘要 */
   cls: SectionClass;
   mu: number;
   /** 绕 x 轴长细比（μL / ix），即弱轴方向位移对应的强轴 i */
@@ -67,6 +74,7 @@ export const useStore = create<AppState>((set) => ({
   support: 'PIN_PIN',
   grade: 'Q235',
   classOverride: 'auto',
+  fabrication: 'rolled',
   P: 200_000, // 200 kN
   deformAmp: 0.5,
 
@@ -97,6 +105,7 @@ export const useStore = create<AppState>((set) => ({
   setSupport: (support) => set({ support }),
   setGrade: (grade) => set({ grade }),
   setClassOverride: (classOverride) => set({ classOverride }),
+  setFabrication: (fabrication) => set({ fabrication }),
   setP: (P) => set({ P }),
   setDeformAmp: (deformAmp) => set({ deformAmp }),
 }));
@@ -108,17 +117,26 @@ export const useStore = create<AppState>((set) => ({
 export function deriveAll(s: AppState): DerivedState {
   const props = computeSectionProps(s.section);
   const fy = fyOf(s.grade, props.tMax);
-  const autoCls = classifySection(s.sectionKind, s.grade, props.tMax);
-  const cls = s.classOverride === 'auto' ? autoCls : s.classOverride;
+  const axisClsAuto = classifySection(s.sectionKind, s.grade, props.tMax, {
+    fabrication: s.fabrication,
+    section: s.section,
+  });
+  // 手动覆盖时两轴统一为同一类
+  const axisCls: AxisClass = s.classOverride === 'auto'
+    ? axisClsAuto
+    : { x: s.classOverride, y: s.classOverride };
+  const cls = worseClass(axisCls);
   const mu = SUPPORTS[s.support].mu;
 
   const lambdaX = slenderness(mu, s.L, props.ix);
   const lambdaY = slenderness(mu, s.L, props.iy);
-  const lambda = Math.max(lambdaX, lambdaY);
-  const controlAxis: 'x' | 'y' = lambdaY > lambdaX ? 'y' : 'x';
 
-  const phiX = phiGB(lambdaX, fy, cls);
-  const phiY = phiGB(lambdaY, fy, cls);
+  // 双轴各用其对应的类别曲线
+  const phiX = phiGB(lambdaX, fy, axisCls.x);
+  const phiY = phiGB(lambdaY, fy, axisCls.y);
+  // 控制轴：φ 小者（承载力低者）
+  const controlAxis: 'x' | 'y' = phiY < phiX ? 'y' : 'x';
+  const lambda = controlAxis === 'y' ? lambdaY : lambdaX;
   const phi = Math.min(phiX, phiY);
 
   const Imin = Math.min(props.Ix, props.Iy);
@@ -128,7 +146,7 @@ export function deriveAll(s: AppState): DerivedState {
   const utilization = s.P / N_cr;
 
   return {
-    props, fy, cls, mu,
+    props, fy, axisClsAuto, axisCls, cls, mu,
     lambdaX, lambdaY, lambda, controlAxis,
     phiX, phiY, phi,
     N_E, N_GB, N_cr, utilization,

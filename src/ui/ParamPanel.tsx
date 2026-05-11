@@ -6,6 +6,7 @@ import { H_PRESETS } from '../mechanics/sections';
 import { STEEL_GRADES } from '../mechanics/steel';
 import { SUPPORT_LIST } from '../mechanics/supports';
 import type { SectionKind, HParams } from '../mechanics/sections';
+import type { Fabrication, AxisClass, SectionClass } from '../mechanics/classify';
 import { SectionDiagram } from './SectionDiagram';
 
 const SECTION_KINDS: { value: SectionKind; label: string }[] = [
@@ -115,8 +116,27 @@ export function ParamPanel() {
 
         <SectionDiagram section={s.section} />
 
-        {/* 截面分类徽标 */}
-        <ClassBadge cls={d.cls} override={s.classOverride !== 'auto'} grade={s.grade} tMax={d.props.tMax} kind={s.sectionKind} />
+        {/* 制造方式：仅 H/PIPE 需要选择 */}
+        {(s.sectionKind === 'H' || s.sectionKind === 'PIPE') && (
+          <Field label="制造方式 (影响截面分类)">
+            <FabricationSelector
+              kind={s.sectionKind}
+              value={s.fabrication}
+              onChange={s.setFabrication}
+            />
+          </Field>
+        )}
+
+        {/* 双轴截面分类徽标 */}
+        <ClassBadge
+          axisCls={d.axisCls}
+          autoCls={d.axisClsAuto}
+          override={s.classOverride !== 'auto'}
+          grade={s.grade}
+          tMax={d.props.tMax}
+          kind={s.sectionKind}
+          fabrication={s.fabrication}
+        />
 
         <div className="grid grid-cols-2 gap-1.5 text-[11px]">
           <Stat label="A"   value={`${d.props.A.toFixed(0)} mm²`} />
@@ -254,49 +274,118 @@ function updateH(store: AppState, sec: HParams, patch: Partial<Omit<HParams, 'ki
   store.setSection({ ...sec, ...patch });
 }
 
-const CLS_INFO: Record<string, { color: string; bg: string; label: string; hint: string }> = {
-  a: { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'a 类',
-       hint: '截面残余应力影响最小（如轧制圆管、热轧厚板焊接箱形）' },
-  b: { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'b 类',
-       hint: '常见 H 型钢（h/b≤0.8）与多数轧制截面' },
-  c: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'c 类',
-       hint: '焊接板厚 t≥40mm 的箱形 / 较薄翼缘 H' },
-  d: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'd 类',
-       hint: '厚板焊接、残余应力最大（t≥40mm 翼缘焊接 H 等）' },
+const CLS_COLORS: Record<SectionClass, string> = {
+  a: '#22c55e', b: '#3b82f6', c: '#f59e0b', d: '#ef4444',
 };
 
+function FabricationSelector({
+  kind, value, onChange,
+}: { kind: SectionKind; value: Fabrication; onChange: (f: Fabrication) => void }) {
+  const opts: { value: Fabrication; label: string }[] =
+    kind === 'H'
+      ? [
+          { value: 'rolled', label: '轧制' },
+          { value: 'welded_flame', label: '焊接(焰切边)' },
+          { value: 'welded_rolled_edge', label: '焊接(轧/剪边)' },
+        ]
+      : kind === 'PIPE'
+      ? [
+          { value: 'rolled', label: '热轧无缝' },
+          { value: 'welded_rolled_edge', label: '焊接钢管' },
+        ]
+      : [];
+  return (
+    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${opts.length}, 1fr)` }}>
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`px-1.5 py-1.5 rounded text-[11px] border transition-colors ${
+            value === o.value
+              ? 'bg-blue-600/20 border-blue-500/60 text-blue-200'
+              : 'bg-[#1c2029] border-[#2a2f3a] text-slate-300 hover:border-slate-600'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<SectionKind, string> = {
+  H: 'H/I 型钢', BOX: '箱形管', PIPE: '圆管', RECT: '实心矩形',
+};
+
+const FAB_LABEL: Record<Fabrication, string> = {
+  rolled: '轧制',
+  welded_flame: '焊接·焰切边',
+  welded_rolled_edge: '焊接·轧/剪边',
+};
+
+function thicknessRange(tMax: number): string {
+  if (tMax < 40) return 't < 40 mm';
+  if (tMax < 80) return '40 ≤ t < 80 mm';
+  return 't ≥ 80 mm';
+}
+
 function ClassBadge({
-  cls, override, grade, tMax, kind,
-}: { cls: string; override: boolean; grade: string; tMax: number; kind: SectionKind }) {
-  const info = CLS_INFO[cls] ?? CLS_INFO.b;
-  const kindLabel: Record<SectionKind, string> = {
-    H: 'H 型钢', BOX: '箱形管', PIPE: '圆管', RECT: '实心矩形',
-  };
+  axisCls, autoCls, override, grade, tMax, kind, fabrication,
+}: {
+  axisCls: AxisClass;
+  autoCls: AxisClass;
+  override: boolean;
+  grade: string;
+  tMax: number;
+  kind: SectionKind;
+  fabrication: Fabrication;
+}) {
+  const tableNo = tMax < 40 ? 'GB 50017-2017 表 7.2.1-1' : 'GB 50017-2017 表 7.2.1-2';
+  const fabShow = kind === 'H' ? FAB_LABEL[fabrication]
+                 : kind === 'PIPE' ? (fabrication === 'rolled' ? '热轧无缝' : '焊接钢管')
+                 : '';
+  const q235Note = grade === 'Q235' && (autoCls.x === 'a' || autoCls.y === 'a');
+  return (
+    <div className="rounded border border-[#2a2f3a] bg-[#1c2029] overflow-hidden">
+      <div className="px-2.5 py-1.5 bg-[#252b36] flex items-center justify-between">
+        <span className="text-[12px] text-slate-200 font-semibold">截面分类（按轴）</span>
+        {override
+          ? <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300">手动覆盖</span>
+          : <span className="text-[9px] px-1 py-0.5 rounded bg-slate-700 text-slate-400">规范自动判定</span>}
+      </div>
+      <div className="px-2.5 py-2 grid grid-cols-2 gap-2">
+        <AxisClassChip axis="x" cls={axisCls.x} />
+        <AxisClassChip axis="y" cls={axisCls.y} />
+      </div>
+      <div className="px-2.5 pb-2 text-[10px] text-slate-400 font-mono leading-snug">
+        {KIND_LABEL[kind]}
+        {fabShow && <> · {fabShow}</>}
+        {' · '}{grade} · t<sub>max</sub>={tMax.toFixed(1)} mm（{thicknessRange(tMax)}）
+      </div>
+      <div className="px-2.5 pb-2 text-[10px] text-slate-500 leading-snug">
+        依据 <span className="text-slate-300">{tableNo}</span>
+        {q235Note && <>; Q235 注：a 类改为 b 类</>}
+      </div>
+    </div>
+  );
+}
+
+function AxisClassChip({ axis, cls }: { axis: 'x' | 'y'; cls: SectionClass }) {
   return (
     <div
-      className="rounded border px-2.5 py-2"
-      style={{ background: info.bg, borderColor: info.color + '66' }}
+      className="flex items-center gap-2 px-2 py-1.5 rounded border"
+      style={{ background: CLS_COLORS[cls] + '20', borderColor: CLS_COLORS[cls] + '55' }}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-flex items-center justify-center w-7 h-7 rounded-md font-bold text-[14px] text-white"
-          style={{ background: info.color }}
-        >
-          {cls}
-        </span>
-        <div className="flex-1">
-          <div className="text-[12px] text-slate-100 flex items-center gap-1.5">
-            截面分类 <span className="font-semibold">{info.label}</span>
-            {override
-              ? <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300">手动</span>
-              : <span className="text-[9px] px-1 py-0.5 rounded bg-slate-700 text-slate-400">自动</span>}
-          </div>
-          <div className="text-[10px] text-slate-400 font-mono">
-            {kindLabel[kind]} · {grade} · t<sub>max</sub>={tMax.toFixed(1)} mm
-          </div>
-        </div>
+      <span
+        className="inline-flex items-center justify-center w-7 h-7 rounded-md font-bold text-[14px] text-white shrink-0"
+        style={{ background: CLS_COLORS[cls] }}
+      >
+        {cls}
+      </span>
+      <div className="leading-tight">
+        <div className="text-[11px] text-slate-200 font-mono">绕 {axis} 轴</div>
+        <div className="text-[10px] text-slate-400">{cls} 类曲线</div>
       </div>
-      <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">{info.hint}</div>
     </div>
   );
 }
