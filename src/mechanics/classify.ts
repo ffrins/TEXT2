@@ -23,24 +23,25 @@ export interface ClassifyOpts {
 /**
  * GB 50017-2017 表 7.2.1-1 / -2 的双轴截面分类。
  *
- * 表 7.2.1-1 (t<40mm)：
- *   轧制 H/I：       x=a, y=b
- *   焊接 H 焰切边：  x=b, y=b
- *   焊接 H 轧/剪边： x=b, y=c
- *   热轧无缝圆管：   a (双轴)
- *   焊接圆管：       b (双轴)
- *   热轧矩形/方管：  a (双轴)
- *   焊接箱形 b/t<20: b (双轴)
- *   焊接箱形 b/t≥20: c (双轴)
+ * 表 7.2.1-1 (板厚 t<40mm)：
+ *   轧制 H/工字钢  b/h  > 0.8：           x=a*, y=a*
+ *   轧制 H/工字钢  b/h ≤ 0.8：            x=a*, y=b
+ *   焊接 H，翼缘为焰切边：                x=b,  y=b
+ *   焊接 H，翼缘为轧制/剪切边：           x=b,  y=c
+ *   热轧无缝圆管：                        x=a*, y=a*
+ *   焊接圆管：                            x=b,  y=b
+ *   轧制实心方/矩形、热轧方管：           x=a*, y=a*
+ *   焊接箱形 b/t < 20：                   x=b,  y=b
+ *   焊接箱形 b/t ≥ 20：                   x=c,  y=c
  *
- * 表 7.2.1-2 (t≥40mm)，按 40≤t<80 / t≥80 两档：
- *   轧制 H/I：           t<80→x=b,y=c；t≥80→x=c,y=d
- *   焊接 H 焰切边：      t<80→x=b,y=b；t≥80→x=c,y=c
- *   焊接 H 轧/剪边：     t<80→x=b,y=c；t≥80→x=c,y=d
- *   焊接箱形 b/t<20：    t<80→x=b,y=b；t≥80→x=c,y=c
- *   圆管：               与 t<40 同
+ * 表 7.2.1-2 (板厚 t≥40mm)，按翼缘厚 40≤t<80 / t≥80 分档：
+ *   轧制 H/工字钢：         t<80 → x=b, y=c；t≥80 → x=c, y=d
+ *   焊接 H 焰切边：         t<80 → x=b, y=b；t≥80 → x=c, y=c
+ *   焊接 H 轧/剪边：        t<80 → x=b, y=c；t≥80 → x=c, y=d
+ *   焊接箱形 b/t<20：       t<80 → x=b, y=b；t≥80 → x=c, y=c
+ *   圆管：                  与 t<40 表同
  *
- * 表注："当 Q235 钢材出现 a 类时，应改用 b 类。"
+ * 表注："当 Q235 钢材出现 a 类（标 *）时，应改为 b 类。"
  */
 export function classifySection(
   kind: SectionKind,
@@ -65,17 +66,24 @@ export function classifySection(
 
     case 'H': {
       if (fab === 'rolled') {
-        if (t1)       res = { x: 'a', y: 'b' };
-        else if (t40_80) res = { x: 'b', y: 'c' };
-        else /* t80 */ res = { x: 'c', y: 'd' };
+        // 轧制 H/工字钢（按表 7.2.1-1 第 1/2 行）
+        // b/h 系翼缘宽与截面高之比
+        const bh = sec && sec.kind === 'H' ? sec.b / sec.h : 0.8;
+        const wide = bh > 0.8;
+        if (t1) {
+          // b/h>0.8: x=a, y=a ；b/h≤0.8: x=a, y=b
+          res = wide ? { x: 'a', y: 'a' } : { x: 'a', y: 'b' };
+        } else if (t40_80) {
+          res = { x: 'b', y: 'c' };
+        } else /* t≥80 */ {
+          res = { x: 'c', y: 'd' };
+        }
       } else if (fab === 'welded_flame') {
-        if (t1)       res = { x: 'b', y: 'b' };
-        else if (t40_80) res = { x: 'b', y: 'b' };
-        else /* t80 */ res = { x: 'c', y: 'c' };
+        if (t1 || t40_80) res = { x: 'b', y: 'b' };
+        else              res = { x: 'c', y: 'c' };
       } else /* welded_rolled_edge */ {
-        if (t1)       res = { x: 'b', y: 'c' };
-        else if (t40_80) res = { x: 'b', y: 'c' };
-        else /* t80 */ res = { x: 'c', y: 'd' };
+        if (t1 || t40_80) res = { x: 'b', y: 'c' };
+        else              res = { x: 'c', y: 'd' };
       }
       break;
     }
