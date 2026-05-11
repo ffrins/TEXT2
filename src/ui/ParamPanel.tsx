@@ -115,6 +115,9 @@ export function ParamPanel() {
 
         <SectionDiagram section={s.section} />
 
+        {/* 截面分类徽标 */}
+        <ClassBadge cls={d.cls} override={s.classOverride !== 'auto'} grade={s.grade} tMax={d.props.tMax} kind={s.sectionKind} />
+
         <div className="grid grid-cols-2 gap-1.5 text-[11px]">
           <Stat label="A"   value={`${d.props.A.toFixed(0)} mm²`} />
           <Stat label="tMax" value={`${d.props.tMax.toFixed(1)} mm`} />
@@ -172,22 +175,38 @@ export function ParamPanel() {
           {SUPPORT_LIST.map((sp) => (
             <label
               key={sp.kind}
-              className={`flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer border ${
+              className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-md cursor-pointer border ${
                 s.support === sp.kind
                   ? 'bg-blue-600/15 border-blue-500/60 text-blue-200'
                   : 'bg-[#1c2029] border-transparent hover:border-slate-600'
               }`}
             >
-              <input
-                type="radio"
-                name="support"
-                checked={s.support === sp.kind}
-                onChange={() => s.setSupport(sp.kind)}
-                className="accent-blue-500"
-              />
-              <span>{sp.label}</span>
+              <span className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="support"
+                  checked={s.support === sp.kind}
+                  onChange={() => s.setSupport(sp.kind)}
+                  className="accent-blue-500"
+                />
+                <span>{sp.label}</span>
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">μ={sp.mu}</span>
             </label>
           ))}
+        </div>
+
+        {/* 计算长度 L0 */}
+        <div className="mt-1 p-2.5 bg-blue-600/10 border border-blue-500/30 rounded">
+          <div className="text-[11px] text-slate-400 mb-1">计算长度 (Effective Length)</div>
+          <div className="font-mono text-[13px] text-slate-100">
+            L<sub>0</sub> = μ·L = <span className="text-blue-300">{d.mu}</span> × {(s.L / 1000).toFixed(2)} m
+            <span className="mx-1.5 text-slate-500">=</span>
+            <span className="text-blue-200 text-[14px] font-semibold">{(d.mu * s.L / 1000).toFixed(2)} m</span>
+          </div>
+          <div className="text-[10px] text-slate-500 mt-1 font-mono">
+            {((d.mu * s.L)).toFixed(0)} mm · 用于 λ = L<sub>0</sub>/i 计算
+          </div>
         </div>
       </Section>
 
@@ -233,6 +252,53 @@ export function ParamPanel() {
 
 function updateH(store: AppState, sec: HParams, patch: Partial<Omit<HParams, 'kind'>>) {
   store.setSection({ ...sec, ...patch });
+}
+
+const CLS_INFO: Record<string, { color: string; bg: string; label: string; hint: string }> = {
+  a: { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'a 类',
+       hint: '截面残余应力影响最小（如轧制圆管、热轧厚板焊接箱形）' },
+  b: { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'b 类',
+       hint: '常见 H 型钢（h/b≤0.8）与多数轧制截面' },
+  c: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'c 类',
+       hint: '焊接板厚 t≥40mm 的箱形 / 较薄翼缘 H' },
+  d: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'd 类',
+       hint: '厚板焊接、残余应力最大（t≥40mm 翼缘焊接 H 等）' },
+};
+
+function ClassBadge({
+  cls, override, grade, tMax, kind,
+}: { cls: string; override: boolean; grade: string; tMax: number; kind: SectionKind }) {
+  const info = CLS_INFO[cls] ?? CLS_INFO.b;
+  const kindLabel: Record<SectionKind, string> = {
+    H: 'H 型钢', BOX: '箱形管', PIPE: '圆管', RECT: '实心矩形',
+  };
+  return (
+    <div
+      className="rounded border px-2.5 py-2"
+      style={{ background: info.bg, borderColor: info.color + '66' }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-flex items-center justify-center w-7 h-7 rounded-md font-bold text-[14px] text-white"
+          style={{ background: info.color }}
+        >
+          {cls}
+        </span>
+        <div className="flex-1">
+          <div className="text-[12px] text-slate-100 flex items-center gap-1.5">
+            截面分类 <span className="font-semibold">{info.label}</span>
+            {override
+              ? <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300">手动</span>
+              : <span className="text-[9px] px-1 py-0.5 rounded bg-slate-700 text-slate-400">自动</span>}
+          </div>
+          <div className="text-[10px] text-slate-400 font-mono">
+            {kindLabel[kind]} · {grade} · t<sub>max</sub>={tMax.toFixed(1)} mm
+          </div>
+        </div>
+      </div>
+      <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">{info.hint}</div>
+    </div>
+  );
 }
 
 function fmtSci(x: number): string {
