@@ -46,7 +46,7 @@ export interface ClassifyOpts {
  */
 export function classifySection(
   kind: SectionKind,
-  _grade: SteelGrade,
+  grade: SteelGrade,
   tMax: number,
   opts: ClassifyOpts = {},
 ): AxisClass {
@@ -67,13 +67,19 @@ export function classifySection(
 
     case 'H': {
       if (fab === 'rolled') {
-        // 轧制 H/工字钢（按表 7.2.1-1 第 1/2 行）
-        // b/h 系翼缘宽与截面高之比
+        // 轧制 H/工字钢（按 GB 50017-2017 表 7.2.1-1）
+        // b/h ≤ 0.8：x=a, y=b（与钢材等级无关）
+        // b/h > 0.8：Q235  → x=b, y=c；Q355 及以上 → x=a, y=b
         const bh = sec && sec.kind === 'H' ? sec.b / sec.h : 0.8;
         const wide = bh > 0.8;
         if (t1) {
-          // b/h>0.8: x=a, y=a ；b/h≤0.8: x=a, y=b
-          res = wide ? { x: 'a', y: 'a' } : { x: 'a', y: 'b' };
+          if (!wide) {
+            res = { x: 'a', y: 'b' };
+          } else if (grade === 'Q235') {
+            res = { x: 'b', y: 'c' };
+          } else {
+            res = { x: 'a', y: 'b' };
+          }
         } else if (t40_80) {
           res = { x: 'b', y: 'c' };
         } else /* t≥80 */ {
