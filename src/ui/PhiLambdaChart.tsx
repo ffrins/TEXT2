@@ -1,9 +1,9 @@
-// φ-λ 曲线 + 欧拉曲线 + 当前工作点
+// φ-λ 曲线 + 欧拉曲线 + 4 类工作点（双轴 λ 参考线）
 
 import { useMemo } from 'react';
 import {
   ResponsiveContainer, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ReferenceLine, Scatter, ComposedChart,
+  Tooltip, Legend, ReferenceLine, Scatter, ComposedChart, Label,
 } from 'recharts';
 import { useStore, useDerived } from '../store';
 import { phiGB } from '../mechanics/buckling';
@@ -18,11 +18,18 @@ const CLS_COLORS: Record<SectionClass, string> = {
 };
 
 export function PhiLambdaChart() {
-  const fy = useDerived().fy;
-  const lambdaCur = useDerived().lambda;
-  const phiCur = useDerived().phi;
-  const cls = useDerived().cls;
+  const d = useDerived();
+  const { fy, cls, lambdaX, lambdaY, controlAxis } = d;
+  const lambdaCtrl = d.lambda;
   const grade = useStore((s) => s.grade);
+
+  // 在当前控制长细比下，4 个类各自的 φ
+  const dotsAtCtrl = useMemo(() => ({
+    a: phiGB(lambdaCtrl, fy, 'a'),
+    b: phiGB(lambdaCtrl, fy, 'b'),
+    c: phiGB(lambdaCtrl, fy, 'c'),
+    d: phiGB(lambdaCtrl, fy, 'd'),
+  }), [lambdaCtrl, fy]);
 
   // 生成 0..200 的 λ 网格，4 条 GB 曲线 + 欧拉曲线
   const data = useMemo(() => {
@@ -43,13 +50,24 @@ export function PhiLambdaChart() {
 
   return (
     <div className="bg-[#151820] border border-[#2a2f3a] rounded-md p-3">
-      <div className="flex items-baseline justify-between mb-2">
+      <div className="flex items-baseline justify-between mb-1.5 flex-wrap gap-x-3 gap-y-1">
         <div className="text-[13px] font-semibold text-slate-200">
-          稳定系数曲线 φ - λ <span className="text-slate-500 text-[11px] ml-2">{grade} · fy = {fy} MPa</span>
+          稳定系数曲线 φ - λ <span className="text-slate-500 text-[11px] ml-2">{grade} · fy = {fy} MPa · 当前 {cls} 类</span>
         </div>
-        <div className="text-[11px] text-slate-400">
-          当前 (<span className="text-slate-100 font-mono">λ={lambdaCur.toFixed(1)}, φ={phiCur.toFixed(3)}</span>)
+        <div className="text-[11px] text-slate-400 font-mono">
+          λ<sub>x</sub>=<span className="text-rose-300">{lambdaX.toFixed(1)}</span>
+          <span className="mx-1">·</span>
+          λ<sub>y</sub>=<span className="text-emerald-300">{lambdaY.toFixed(1)}</span>
+          <span className="mx-1">·</span>
+          控制=<span className="text-blue-300">λ<sub>{controlAxis}</sub></span>
         </div>
+      </div>
+      <div className="text-[10px] text-slate-500 mb-2">
+        在控制长细比下各截面类对应 φ：
+        <span className="ml-2"><Dot c={CLS_COLORS.a}/> a={dotsAtCtrl.a.toFixed(3)}</span>
+        <span className="ml-2"><Dot c={CLS_COLORS.b}/> b={dotsAtCtrl.b.toFixed(3)}</span>
+        <span className="ml-2"><Dot c={CLS_COLORS.c}/> c={dotsAtCtrl.c.toFixed(3)}</span>
+        <span className="ml-2"><Dot c={CLS_COLORS.d}/> d={dotsAtCtrl.d.toFixed(3)}</span>
       </div>
       <div style={{ width: '100%', height: 280 }}>
         <ResponsiveContainer>
@@ -78,17 +96,69 @@ export function PhiLambdaChart() {
             <Line type="monotone" dataKey="b" stroke={CLS_COLORS.b} dot={false} name="b 类" strokeWidth={cls === 'b' ? 2.5 : 1.2} />
             <Line type="monotone" dataKey="c" stroke={CLS_COLORS.c} dot={false} name="c 类" strokeWidth={cls === 'c' ? 2.5 : 1.2} />
             <Line type="monotone" dataKey="d" stroke={CLS_COLORS.d} dot={false} name="d 类" strokeWidth={cls === 'd' ? 2.5 : 1.2} />
-            <ReferenceLine x={lambdaCur} stroke="#f8fafc" strokeDasharray="2 2" />
+            {/* 双轴 λ 参考线 */}
+            <ReferenceLine x={lambdaX} stroke="#fb7185" strokeDasharray="3 3" strokeWidth={controlAxis === 'x' ? 2 : 1}>
+              <Label value={`λx=${lambdaX.toFixed(1)}`} position="top" fill="#fb7185" fontSize={10} />
+            </ReferenceLine>
+            <ReferenceLine x={lambdaY} stroke="#34d399" strokeDasharray="3 3" strokeWidth={controlAxis === 'y' ? 2 : 1}>
+              <Label value={`λy=${lambdaY.toFixed(1)}`} position="top" fill="#34d399" fontSize={10} dy={14} />
+            </ReferenceLine>
+
+            {/* 在控制 λ 下，4 个类的 φ 值散点 */}
             <Scatter
-              data={[{ lambda: lambdaCur, [cls]: phiCur }]}
-              dataKey={cls}
-              fill="#f8fafc"
+              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl.a }]}
+              dataKey="value"
+              fill={CLS_COLORS.a}
+              stroke="#0f1117"
               shape="circle"
               legendType="none"
+              r={5}
+            />
+            <Scatter
+              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl.b }]}
+              dataKey="value"
+              fill={CLS_COLORS.b}
+              stroke="#0f1117"
+              shape="circle"
+              legendType="none"
+              r={5}
+            />
+            <Scatter
+              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl.c }]}
+              dataKey="value"
+              fill={CLS_COLORS.c}
+              stroke="#0f1117"
+              shape="circle"
+              legendType="none"
+              r={5}
+            />
+            <Scatter
+              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl.d }]}
+              dataKey="value"
+              fill={CLS_COLORS.d}
+              stroke="#0f1117"
+              shape="circle"
+              legendType="none"
+              r={5}
+            />
+            {/* 高亮当前类的环 */}
+            <Scatter
+              data={[{ lambda: lambdaCtrl, value: dotsAtCtrl[cls] }]}
+              dataKey="value"
+              fill="none"
+              stroke="#f8fafc"
+              strokeWidth={2}
+              shape="circle"
+              legendType="none"
+              r={9}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
+}
+
+function Dot({ c }: { c: string }) {
+  return <span className="inline-block w-2 h-2 rounded-full align-middle mr-1" style={{ background: c }} />;
 }

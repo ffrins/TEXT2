@@ -41,12 +41,20 @@ export interface DerivedState {
   fy: number;
   cls: SectionClass;
   mu: number;
+  /** 绕 x 轴长细比（μL / ix），即弱轴方向位移对应的强轴 i */
+  lambdaX: number;
+  lambdaY: number;
+  /** 控制长细比（取大者） */
   lambda: number;
-  N_E: number;        // 欧拉临界力
-  phi: number;        // GB φ
-  N_GB: number;       // GB 承载力
-  N_cr: number;       // min(N_E, N_GB) —— 实际"屈曲限值"
-  utilization: number; // P / N_cr
+  /** 控制轴 'x' | 'y' */
+  controlAxis: 'x' | 'y';
+  phiX: number;
+  phiY: number;
+  phi: number;        // = min(phiX, phiY)
+  N_E: number;        // 欧拉临界力（按 iMin）
+  N_GB: number;       // φ · A · fy
+  N_cr: number;       // min(N_E, N_GB)
+  utilization: number;
 }
 
 const defaultH = H_PRESETS.find((x) => x.name === 'HW200×200')!.p;
@@ -103,13 +111,28 @@ export function deriveAll(s: AppState): DerivedState {
   const autoCls = classifySection(s.sectionKind, s.grade, props.tMax);
   const cls = s.classOverride === 'auto' ? autoCls : s.classOverride;
   const mu = SUPPORTS[s.support].mu;
-  const lambda = slenderness(mu, s.L, props.iMin);
-  const N_E = eulerNcr(E_STEEL, props.Ix === props.Iy ? props.Ix : Math.min(props.Ix, props.Iy), mu, s.L);
-  const phi = phiGB(lambda, fy, cls);
+
+  const lambdaX = slenderness(mu, s.L, props.ix);
+  const lambdaY = slenderness(mu, s.L, props.iy);
+  const lambda = Math.max(lambdaX, lambdaY);
+  const controlAxis: 'x' | 'y' = lambdaY > lambdaX ? 'y' : 'x';
+
+  const phiX = phiGB(lambdaX, fy, cls);
+  const phiY = phiGB(lambdaY, fy, cls);
+  const phi = Math.min(phiX, phiY);
+
+  const Imin = Math.min(props.Ix, props.Iy);
+  const N_E = eulerNcr(E_STEEL, Imin, mu, s.L);
   const N_GB = gbNcr(phi, props.A, fy);
   const N_cr = Math.min(N_E, N_GB);
   const utilization = s.P / N_cr;
-  return { props, fy, cls, mu, lambda, N_E, phi, N_GB, N_cr, utilization };
+
+  return {
+    props, fy, cls, mu,
+    lambdaX, lambdaY, lambda, controlAxis,
+    phiX, phiY, phi,
+    N_E, N_GB, N_cr, utilization,
+  };
 }
 
 export function useDerived(): DerivedState {

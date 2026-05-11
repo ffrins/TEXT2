@@ -1,11 +1,12 @@
 // 左侧参数面板（工程示意风格，自定义 Tailwind UI）
 
-import { useStore } from '../store';
-import { useDerived } from '../store';
+import { useStore, useDerived } from '../store';
+import type { AppState } from '../store';
 import { H_PRESETS } from '../mechanics/sections';
 import { STEEL_GRADES } from '../mechanics/steel';
 import { SUPPORT_LIST } from '../mechanics/supports';
-import type { SectionKind } from '../mechanics/sections';
+import type { SectionKind, HParams } from '../mechanics/sections';
+import { SectionDiagram } from './SectionDiagram';
 
 const SECTION_KINDS: { value: SectionKind; label: string }[] = [
   { value: 'H',    label: 'H 型钢' },
@@ -32,36 +33,54 @@ export function ParamPanel() {
           />
         </Field>
 
-        {s.sectionKind === 'H' && (
-          <>
-            <Field label="规格 (GB/T 11263)">
-              <select
-                className={selectCls}
-                value={s.hPresetName}
-                onChange={(e) => s.setHPreset(e.target.value)}
-              >
-                {(['HW', 'HM', 'HN'] as const).map((series) => (
-                  <optgroup key={series} label={series}>
-                    {H_PRESETS.filter((p) => p.series === series).map((p) => (
-                      <option key={p.name} value={p.name}>{p.name}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </Field>
-            {s.section.kind === 'H' && (() => {
-              const sec = s.section;
-              return (
-                <div className="grid grid-cols-2 gap-2">
-                  <NumInput label="h (mm)" value={sec.h} onChange={(v) => s.setSection({ ...sec, h: v })} />
-                  <NumInput label="b (mm)" value={sec.b} onChange={(v) => s.setSection({ ...sec, b: v })} />
-                  <NumInput label="tw (mm)" step={0.5} value={sec.tw} onChange={(v) => s.setSection({ ...sec, tw: v })} />
-                  <NumInput label="tf (mm)" step={0.5} value={sec.tf} onChange={(v) => s.setSection({ ...sec, tf: v })} />
+        {s.sectionKind === 'H' && s.section.kind === 'H' && (() => {
+          const sec = s.section;
+          const preset = H_PRESETS.find((x) => x.name === s.hPresetName)?.p;
+          const isModified = !preset ||
+            preset.h !== sec.h || preset.b !== sec.b ||
+            preset.tw !== sec.tw || preset.tf !== sec.tf;
+          return (
+            <>
+              <Field label="标准规格 (GB/T 11263)">
+                <select
+                  className={selectCls}
+                  value={isModified ? '__custom__' : s.hPresetName}
+                  onChange={(e) => {
+                    if (e.target.value !== '__custom__') s.setHPreset(e.target.value);
+                  }}
+                >
+                  <option value="__custom__" disabled={!isModified}>— 自定义 —</option>
+                  {(['HW', 'HM', 'HN'] as const).map((series) => (
+                    <optgroup key={series} label={series}>
+                      {H_PRESETS.filter((p) => p.series === series).map((p) => (
+                        <option key={p.name} value={p.name}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </Field>
+              <div>
+                <div className="text-[11px] text-slate-400 mb-1 flex items-center justify-between">
+                  <span>自定义尺寸 (mm)</span>
+                  {isModified && (
+                    <button
+                      onClick={() => s.setHPreset(s.hPresetName)}
+                      className="text-[10px] text-blue-300 hover:text-blue-200 underline decoration-dotted"
+                    >
+                      重置回 {s.hPresetName}
+                    </button>
+                  )}
                 </div>
-              );
-            })()}
-          </>
-        )}
+                <div className="grid grid-cols-2 gap-2">
+                  <NumInput label="h (截面高)" value={sec.h} onChange={(v) => updateH(s, sec, { h: v })} />
+                  <NumInput label="b (翼缘宽)" value={sec.b} onChange={(v) => updateH(s, sec, { b: v })} />
+                  <NumInput label="tw (腹板厚)" step={0.5} value={sec.tw} onChange={(v) => updateH(s, sec, { tw: v })} />
+                  <NumInput label="tf (翼缘厚)" step={0.5} value={sec.tf} onChange={(v) => updateH(s, sec, { tf: v })} />
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         {s.section.kind === 'BOX' && (() => {
           const sec = s.section;
@@ -94,8 +113,16 @@ export function ParamPanel() {
           );
         })()}
 
-        <Stat label="A" value={`${(d.props.A).toFixed(0)} mm²`} />
-        <Stat label="i_min" value={`${d.props.iMin.toFixed(1)} mm`} />
+        <SectionDiagram section={s.section} />
+
+        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+          <Stat label="A"   value={`${d.props.A.toFixed(0)} mm²`} />
+          <Stat label="tMax" value={`${d.props.tMax.toFixed(1)} mm`} />
+          <Stat label="Ix"  value={fmtSci(d.props.Ix)} />
+          <Stat label="Iy"  value={fmtSci(d.props.Iy)} />
+          <Stat label="ix"  value={`${d.props.ix.toFixed(1)} mm`} />
+          <Stat label="iy"  value={`${d.props.iy.toFixed(1)} mm`} />
+        </div>
       </Section>
 
       {/* 钢材 */}
@@ -200,6 +227,19 @@ export function ParamPanel() {
       </Section>
     </div>
   );
+}
+
+/* ============================ helpers ============================ */
+
+function updateH(store: AppState, sec: HParams, patch: Partial<Omit<HParams, 'kind'>>) {
+  store.setSection({ ...sec, ...patch });
+}
+
+function fmtSci(x: number): string {
+  if (!Number.isFinite(x) || x === 0) return '0';
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  const m = x / 10 ** e;
+  return `${m.toFixed(2)}e${e}`;
 }
 
 /* ============================ 子组件 ============================ */

@@ -1,12 +1,10 @@
-// 实时数值卡：λ, λn, φ, N_E, N_GB, N/N_cr 利用率
+// 实时数值卡：双轴 λ/φ，N_E, N_GB, N/N_cr 利用率
 
 import { useStore, useDerived } from '../store';
-import { lambdaN } from '../mechanics/buckling';
 
 export function ResultCards() {
   const P = useStore((s) => s.P);
   const d = useDerived();
-  const ln = lambdaN(d.lambda, d.fy);
   const u = Math.max(0, d.utilization);
   const safe = u < 0.85;
   const danger = u >= 1.0;
@@ -15,13 +13,30 @@ export function ResultCards() {
     <div className="bg-[#151820] border border-[#2a2f3a] rounded-md p-3 space-y-3">
       <div className="text-[13px] font-semibold text-slate-200">实时计算结果</div>
 
+      {/* 双轴长细比与稳定系数 */}
+      <div className="space-y-1.5">
+        <AxisRow
+          axis="x"
+          label={d.props.Ix >= d.props.Iy ? '绕 x 轴 (强轴)' : '绕 x 轴 (弱轴)'}
+          lambda={d.lambdaX}
+          phi={d.phiX}
+          isControl={d.controlAxis === 'x'}
+          i={d.props.ix}
+        />
+        <AxisRow
+          axis="y"
+          label={d.props.Iy > d.props.Ix ? '绕 y 轴 (强轴)' : '绕 y 轴 (弱轴)'}
+          lambda={d.lambdaY}
+          phi={d.phiY}
+          isControl={d.controlAxis === 'y'}
+          i={d.props.iy}
+        />
+      </div>
+
       <div className="grid grid-cols-3 gap-2">
-        <Cell label="λ"     value={d.lambda.toFixed(1)} />
-        <Cell label="λ_n"   value={ln.toFixed(3)} />
-        <Cell label="φ"     value={d.phi.toFixed(3)} />
-        <Cell label="N_E"   value={`${(d.N_E / 1000).toFixed(1)} kN`} hint="欧拉" />
-        <Cell label="N_GB"  value={`${(d.N_GB / 1000).toFixed(1)} kN`} hint="GB φAfy" />
-        <Cell label="N_cr"  value={`${(d.N_cr / 1000).toFixed(1)} kN`} hint="min" highlight />
+        <Cell label="N_E"  value={`${(d.N_E / 1000).toFixed(1)} kN`} hint="欧拉" />
+        <Cell label="N_GB" value={`${(d.N_GB / 1000).toFixed(1)} kN`} hint="GB φAfy" />
+        <Cell label="N_cr" value={`${(d.N_cr / 1000).toFixed(1)} kN`} hint="min" highlight />
       </div>
 
       <div>
@@ -43,6 +58,26 @@ export function ResultCards() {
         </div>
         <div className="text-[11px] text-slate-500 mt-1.5">N = {(P / 1000).toFixed(1)} kN</div>
       </div>
+    </div>
+  );
+}
+
+function AxisRow({
+  axis, label, lambda, phi, isControl, i,
+}: { axis: 'x' | 'y'; label: string; lambda: number; phi: number; isControl: boolean; i: number }) {
+  return (
+    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-[12px] ${
+      isControl ? 'bg-blue-600/15 border border-blue-500/40' : 'bg-[#1c2029] border border-transparent'
+    }`}>
+      <span className={`font-mono text-[11px] w-6 ${axis === 'x' ? 'text-rose-300' : 'text-emerald-300'}`}>
+        λ<sub>{axis}</sub>
+      </span>
+      <span className="text-slate-400 text-[11px] flex-1">{label}</span>
+      <span className="text-slate-400 text-[10px] font-mono">i={i.toFixed(1)}</span>
+      <span className="text-slate-100 font-mono w-14 text-right">{lambda.toFixed(1)}</span>
+      <span className="text-slate-400 text-[10px]">→ φ=</span>
+      <span className="text-slate-100 font-mono w-12 text-right">{phi.toFixed(3)}</span>
+      {isControl && <span className="text-[10px] text-blue-300">控制</span>}
     </div>
   );
 }
