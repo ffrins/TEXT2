@@ -2,25 +2,21 @@ import { Scene } from './scene/Scene';
 import { ParamPanel } from './ui/ParamPanel';
 import { ResultCards } from './ui/ResultCards';
 import { PhiLambdaChart } from './ui/PhiLambdaChart';
-import { BottomControls } from './ui/BottomControls';
 
 function App() {
   return (
     <div className="h-screen w-screen flex bg-[#0f1117] text-slate-200 overflow-hidden">
-      {/* 左：参数面板（截面 + 钢材） */}
+      {/* 左：参数面板 */}
       <aside className="w-[340px] flex-shrink-0">
         <ParamPanel />
       </aside>
 
-      {/* 中：3D 视口 + 底部控制条 */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 relative min-h-0">
-          <Scene />
-          <div className="absolute top-3 left-3 px-3 py-1.5 bg-black/40 rounded text-[12px] text-slate-300 backdrop-blur-sm pointer-events-none">
-            钢柱轴心受压稳定可视化 · GB 50017-2017
-          </div>
+      {/* 中：3D 视口 */}
+      <main className="flex-1 relative min-w-0">
+        <Scene />
+        <div className="absolute top-3 left-3 px-3 py-1.5 bg-black/40 rounded text-[12px] text-slate-300 backdrop-blur-sm pointer-events-none">
+          钢柱轴心受压稳定可视化 · GB 50017-2017
         </div>
-        <BottomControls />
       </main>
 
       {/* 右：结果 + 图表 */}

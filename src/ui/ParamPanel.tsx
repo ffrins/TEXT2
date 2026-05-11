@@ -4,6 +4,7 @@ import { useStore, useDerived } from '../store';
 import type { AppState } from '../store';
 import { H_PRESETS } from '../mechanics/sections';
 import { STEEL_GRADES } from '../mechanics/steel';
+import { SUPPORT_LIST } from '../mechanics/supports';
 import type { SectionKind, HParams } from '../mechanics/sections';
 import type { Fabrication, AxisClass, SectionClass } from '../mechanics/classify';
 import { SectionDiagram } from './SectionDiagram';
@@ -129,7 +130,6 @@ export function ParamPanel() {
         {/* 双轴截面分类徽标 */}
         <ClassBadge
           axisCls={d.axisCls}
-          autoCls={d.axisClsAuto}
           override={s.classOverride !== 'auto'}
           grade={s.grade}
           tMax={d.props.tMax}
@@ -173,9 +173,102 @@ export function ParamPanel() {
         <Stat label="fy" value={`${d.fy} MPa`} />
       </Section>
 
+      {/* 几何 */}
+      <Section title="几何 Geometry">
+        <Field label={`柱长 L = ${(s.L / 1000).toFixed(2)} m`}>
+          <input
+            type="range"
+            min={500}
+            max={12000}
+            step={100}
+            value={s.L}
+            onChange={(e) => s.setL(+e.target.value)}
+            className={rangeCls}
+          />
+        </Field>
+        <NumInput label="L (mm)" value={s.L} step={50} onChange={s.setL} />
+      </Section>
+
+      {/* 支座 */}
+      <Section title="支座 Boundary Conditions">
+        <div className="space-y-1.5">
+          {SUPPORT_LIST.map((sp) => (
+            <label
+              key={sp.kind}
+              className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-md cursor-pointer border ${
+                s.support === sp.kind
+                  ? 'bg-blue-600/15 border-blue-500/60 text-blue-200'
+                  : 'bg-[#1c2029] border-transparent hover:border-slate-600'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="support"
+                  checked={s.support === sp.kind}
+                  onChange={() => s.setSupport(sp.kind)}
+                  className="accent-blue-500"
+                />
+                <span>{sp.label}</span>
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">μ={sp.mu}</span>
+            </label>
+          ))}
+        </div>
+
+        {/* 计算长度 L0 */}
+        <div className="mt-1 p-2.5 bg-blue-600/10 border border-blue-500/30 rounded">
+          <div className="text-[11px] text-slate-400 mb-1">计算长度 (Effective Length)</div>
+          <div className="font-mono text-[13px] text-slate-100">
+            L<sub>0</sub> = μ·L = <span className="text-blue-300">{d.mu}</span> × {(s.L / 1000).toFixed(2)} m
+            <span className="mx-1.5 text-slate-500">=</span>
+            <span className="text-blue-200 text-[14px] font-semibold">{(d.mu * s.L / 1000).toFixed(2)} m</span>
+          </div>
+          <div className="text-[10px] text-slate-500 mt-1 font-mono">
+            {((d.mu * s.L)).toFixed(0)} mm · 用于 λ = L<sub>0</sub>/i 计算
+          </div>
+        </div>
+      </Section>
+
+      {/* 荷载 */}
+      <Section title="荷载 Axial Force">
+        <Field label={`N = ${(s.P / 1000).toFixed(1)} kN`}>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(d.N_cr * 1.2, 10000)}
+            step={1000}
+            value={s.P}
+            onChange={(e) => s.setP(+e.target.value)}
+            className={rangeCls}
+          />
+        </Field>
+        <NumInput label="N (N)" value={s.P} step={1000} onChange={s.setP} />
+        <div className="text-xs text-slate-400 mt-1">N_cr ≈ {(d.N_cr / 1000).toFixed(1)} kN</div>
+      </Section>
+
+      {/* 显示 */}
+      <Section title="显示 Display">
+        <Field label={`变形放大系数 ${(s.deformAmp).toFixed(2)}`}>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={s.deformAmp}
+            onChange={(e) => s.setDeformAmp(+e.target.value)}
+            className={rangeCls}
+          />
+        </Field>
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          仅放大视觉位移，不影响力学计算。
+        </p>
+      </Section>
     </div>
   );
 }
+
+const rangeCls = 'w-full accent-blue-500';
 
 /* ============================ helpers ============================ */
 
@@ -239,10 +332,9 @@ function thicknessRange(tMax: number): string {
 }
 
 function ClassBadge({
-  axisCls, autoCls, override, grade, tMax, kind, fabrication, section,
+  axisCls, override, grade, tMax, kind, fabrication, section,
 }: {
   axisCls: AxisClass;
-  autoCls: AxisClass;
   override: boolean;
   grade: string;
   tMax: number;
@@ -254,7 +346,6 @@ function ClassBadge({
   const fabShow = kind === 'H' ? FAB_LABEL[fabrication]
                  : kind === 'PIPE' ? (fabrication === 'rolled' ? '热轧无缝' : '焊接钢管')
                  : '';
-  const q235Note = grade === 'Q235' && (autoCls.x === 'a' || autoCls.y === 'a');
   // 判定依据细节
   let ratioInfo = '';
   if (kind === 'H' && section.kind === 'H' && fabrication === 'rolled' && tMax < 40) {
@@ -284,7 +375,6 @@ function ClassBadge({
       </div>
       <div className="px-2.5 pb-2 text-[10px] text-slate-500 leading-snug">
         依据 <span className="text-slate-300">{tableNo}</span>
-        {q235Note && <>; Q235 注：a 类改为 b 类</>}
       </div>
     </div>
   );

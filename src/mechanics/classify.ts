@@ -41,11 +41,12 @@ export interface ClassifyOpts {
  *   焊接箱形 b/t<20：       t<80 → x=b, y=b；t≥80 → x=c, y=c
  *   圆管：                  与 t<40 表同
  *
- * 表注："当 Q235 钢材出现 a 类（标 *）时，应改为 b 类。"
+ * 注：规范中 Q235 改 b 类的注（带 * 项）仅适用于热轧无缝圆管/热轧实心矩形等特定行，
+ *     不适用于轧制 H/工字钢、焊接箱形等。本实现按各行直接列出的类别返回。
  */
 export function classifySection(
   kind: SectionKind,
-  grade: SteelGrade,
+  _grade: SteelGrade,
   tMax: number,
   opts: ClassifyOpts = {},
 ): AxisClass {
@@ -118,11 +119,6 @@ export function classifySection(
       res = { x: 'b', y: 'b' };
   }
 
-  // Q235 注：原 a → b
-  if (grade === 'Q235') {
-    if (res.x === 'a') res.x = 'b';
-    if (res.y === 'a') res.y = 'b';
-  }
   return res;
 }
 
