@@ -68,8 +68,8 @@ export function PhiLambdaChart() {
         <span><Dot c={CLS_COLORS[axisCls.x]}/> 工作点 x：λ={lambdaX.toFixed(1)}, φ<sub>x</sub>=<span className="text-slate-200 font-mono">{phiX.toFixed(3)}</span> （{axisCls.x} 类曲线）</span>
         <span><Dot c={CLS_COLORS[axisCls.y]}/> 工作点 y：λ={lambdaY.toFixed(1)}, φ<sub>y</sub>=<span className="text-slate-200 font-mono">{phiY.toFixed(3)}</span> （{axisCls.y} 类曲线）</span>
       </div>
-      <div style={{ width: '100%', height: 280 }}>
-        <ResponsiveContainer>
+      <div style={{ width: '100%', height: 280, minWidth: 0 }}>
+        <ResponsiveContainer width="99%" height="100%" minWidth={0}>
           <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
             <CartesianGrid stroke="#2a2f3a" strokeDasharray="3 3" />
             <XAxis

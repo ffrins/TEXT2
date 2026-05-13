@@ -3,7 +3,7 @@
 import { Canvas } from '@react-three/fiber';
 import {
   OrbitControls, Grid, ContactShadows,
-  GizmoHelper, GizmoViewport, Html, Environment,
+  GizmoHelper, GizmoViewport, Html,
 } from '@react-three/drei';
 import { Column } from './Column';
 import { Supports } from './Supports';
@@ -29,11 +29,9 @@ export function Scene() {
           'radial-gradient(ellipse at 50% 30%, #1f2530 0%, #131720 55%, #0a0d14 100%)',
       }}
     >
-      {/* 渐变天空作为环境光（提升金属质感）*/}
-      <Environment preset="city" environmentIntensity={0.35} />
-
-      {/* 三向布光 */}
-      <ambientLight intensity={0.45} />
+      {/* 三向布光（不依赖外网 HDR 资源） */}
+      <hemisphereLight args={['#9bb6ff', '#1a1f2a', 0.55]} />
+      <ambientLight intensity={0.35} />
       <directionalLight
         position={[L * 1.5, L * 2, L * 1.5]}
         intensity={1.1}
